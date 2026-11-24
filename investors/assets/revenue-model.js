@@ -1,40 +1,19 @@
-/* Planning assumptions, not actual performance. Month 1 = commercial launch. */
-const RevenueModel = (() => {
-  const prices = Object.freeze({ registration:1999, firstFee:499, repeatFee:249, cover:500, guruIntro:99, guru:199, setup:0 });
-  const cases = Object.freeze({
-    Cautious:{paidTarget:450,meta:100000,provider:80000,productCost:150000,spend:180000,activeMonths:3,firstDate:.30,repeatRate:.20,guruAdoption:.10},
-    Base:{paidTarget:900,meta:125000,provider:180000,productCost:250000,spend:305000,activeMonths:6,firstDate:.50,repeatRate:.35,guruAdoption:.20},
-    Upside:{paidTarget:1500,meta:150000,provider:300000,productCost:400000,spend:450000,activeMonths:9,firstDate:.70,repeatRate:.50,guruAdoption:.30}
+/* Planning assumptions, INR, 24 Nov 2026. Mirrors the downloadable workbook. */
+const RevenueModel=(()=>{
+ const cases={Conservative:{factor:.5,operations:150000,conversion:.05},Base:{factor:1,operations:250000,conversion:.1},Aggressive:{factor:1.5,operations:400000,conversion:.15}};
+ const base=[150,250,400,600,800,1000,1100,1200,1350,1500,1700,1950];
+ const cities=[['Bengaluru',1],['Delhi NCR',1],['Mumbai',1],['Pune',2],['Hyderabad',3],['Chennai',4],['Kolkata',5],['Ahmedabad',6],['Jaipur',7],['Chandigarh',8],['Kochi',9]];
+ function calculate(name){
+  const c=cases[name];if(!c)throw Error('Unknown scenario');
+  let cash=500000,paidTotal=0,collections=0,costs=0,providerTotal=0,metaTotal=0,bgvTotal=0,gatewayTotal=0,minCash=500000,reserveGap=0;
+  return base.map((n,i)=>{
+   const paid=n*c.factor,provider=Math.max(80000,paid*200),meta=paid<=400?100000:paid<=1500?100000+(paid-400)*50000/1100:paid*100;
+   const revenue=paid*1999,bgv=paid*150,gateway=paid*46,setup=i===0?100000:0,recurring=provider+meta+bgv+gateway+c.operations,cost=recurring+setup;
+   cash+=revenue-cost;paidTotal+=paid;collections+=revenue;costs+=cost;providerTotal+=provider;metaTotal+=meta;bgvTotal+=bgv;gatewayTotal+=gateway;
+   const reserve=recurring*3,headroom=Math.max(0,cash-reserve);minCash=Math.min(minCash,cash);reserveGap=Math.max(reserveGap,reserve-cash,0);
+   return {month:i+1,paid,paidTotal,freeSignups:Math.ceil(paid/c.conversion),revenue,collections,provider,meta,providerTotal,metaTotal,bgvTotal,gatewayTotal,operationsTotal:c.operations*(i+1),cost,costs,cash,reserve,headroom,minCash,reserveGap,productAllocation:headroom*.4,marketingAllocation:headroom*.35,regionAllocation:headroom*.25,cities:cities.filter(x=>x[1]<=i+1).length};
   });
-  function calculate(name, options={}) {
-    const c={...cases[name],...options};
-    if(!cases[name]) throw new Error('Unknown scenario');
-    const cohorts=[]; let cumulativeSignups=0,cumulativePaid=0,cumulativeBgv=0,marketing=prices.setup;
-    let cumulativeFees=0, cumulativeCollections=0, cumulativeCover=0, cumulativeOperations=0;
-    return Array.from({length:60},(_,i)=>{
-      const month=i+1, spend=c.meta+c.provider,paid=c.paidTarget,signups=null;
-      cohorts.push(paid); const active=cohorts.slice(-c.activeMonths).reduce((a,b)=>a+b,0);
-      cumulativePaid+=paid;marketing+=spend;
-      // Each converted cohort has first dates in its joining month. Repeat participants
-      // come only from prior first-date cohorts, until the assumed activity window ends.
-      const firstParticipants=paid*c.firstDate;
-      const repeatParticipants=(active-paid)*c.firstDate*c.repeatRate;
-      const participants=firstParticipants+repeatParticipants;
-      const guruSubscribers=month>=7?active*c.guruAdoption:0;
-      const guruPrice=month<7?0:month<=12?prices.guruIntro:prices.guru;
-      const registration=paid*prices.registration;
-      const dates=firstParticipants*prices.firstFee+repeatParticipants*prices.repeatFee;
-      const guru=guruSubscribers*guruPrice;
-      const fees=registration+dates+guru, cover=participants*prices.cover;
-      const bgv=paid*150, operations=0; cumulativeOperations+=operations;cumulativeBgv+=bgv;
-      cumulativeFees+=fees; cumulativeCover+=cover; cumulativeCollections+=fees+cover;
-      return {month,signups,paid,active,firstParticipants,repeatParticipants,participants,
-        pairDates:participants/2,guruSubscribers,registration,dates,guru,fees,cover,
-        productCost:c.productCost,cumulativeProduct:c.productCost*month,net:cumulativeFees-cumulativeBgv-marketing-c.productCost*month,bgv,operations,cumulativeBgv,cumulativeOperations,collections:fees+cover,cumulativeFees,cumulativeCover,cumulativeCollections,
-        cumulativeSignups,cumulativePaid,
-        marketing,paidCAC:paid?spend/paid:0};
-    });
-  }
-  return {prices,cases,calculate};
+ }
+ return {cases,cities,calculate};
 })();
-if(typeof module!=='undefined') module.exports=RevenueModel;
+if(typeof module!=='undefined')module.exports=RevenueModel;
