@@ -3,8 +3,8 @@ const films={
  idea:{title:'The idea',label:'PRODUCT VISION',caption:'Why DhaShu exists, and the journey we are building.',src:'https://dhashu.com/media/idea-20261113.mp4',poster:'./assets/idea.webp'},
  calendar:{title:'Your dating week',label:'PRODUCT EXPLAINER',caption:'A little structure. Real time to meet.',src:'https://dhashu.com/media/dating-calendar-20261113.mp4',poster:'./assets/calendar.webp'},
  app:{title:'Inside the app',label:'PRODUCT WALKTHROUGH',caption:'From your profile to REACH and date planning.',src:'https://dhashu.com/media/dating-app-20261113.mp4',poster:'./assets/app.webp'},
- ryl:{title:'#RYL',label:'CAMPAIGN CONCEPT',caption:'A creative route for introducing the brand.',src:'./assets/marketing-ryl.mp4',poster:'./assets/ryl.jpg'},
- myb:{title:'#MYB',label:'CAMPAIGN CONCEPT',caption:'Another angle on the conversation.',src:'./assets/marketing-myb.mp4',poster:'./assets/myb.jpg'}
+ ryl:{title:'Reclaim your life (#RYL)',label:'CAMPAIGN CONCEPT',caption:'A creative route for introducing the brand.',src:'./assets/marketing-ryl.mp4',poster:'./assets/ryl.jpg'},
+ myb:{title:'Mind your Business (#MYB)',label:'CAMPAIGN CONCEPT',caption:'Another angle on the conversation.',src:'./assets/marketing-myb.mp4',poster:'./assets/myb.jpg'}
 };
 const rows=(items)=>items.map(([title,copy],i)=>`<div class="feature-row"><b>0${i+1}</b><div><h3>${title}</h3><p>${copy}</p></div></div>`).join('');
 const table=(heads,data)=>`<div class="table-wrap"><table><thead><tr>${heads.map(x=>`<th scope="col">${x}</th>`).join('')}</tr></thead><tbody>${data.map(row=>`<tr>${row.map(x=>`<td>${x}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
@@ -13,7 +13,7 @@ const chapters=[
  {id:'idea',group:'UNDERSTAND',title:'The idea',intro:'Make room for a connection that can become something more.',body:()=>rows([
  ['Start with intention','Vision, personal context and preferences help people articulate whom—and how—they want to date.'],
  ['Make a mutual connection','REACH supports discovery. One-to-one matching is designed to move attention towards a person rather than an endless feed.'],
- ['Move towards a real date','A shared plan brings together availability, neighbourhoods, cuisine and budget. The experience is designed around making time to meet.']])+note('DhaShu is in testing. The public room describes the intended experience alongside the current development position; it is not a claim of commercial traction.')+'<button class="button" data-film="idea">Watch the idea <span>▶</span></button>'},
+ ['Move towards a real date','A shared plan brings together availability, neighbourhoods, cuisine and budget. The experience is designed around making time to meet.']])+note('DhaShu has completed Android and iOS testing and is preparing for launch. The public room describes the intended experience alongside the current development position; it is not a claim of commercial traction.')+'<button class="button" data-film="idea">Watch the idea <span>▶</span></button>'},
  {id:'product',group:'UNDERSTAND',title:'What is built today',intro:'Tested on Android and iOS. Preparing for production.',body:productContent},
  {id:'difference',group:'UNDERSTAND',title:'Why this is different',intro:'Eight reasons to choose DhaShu. Tap to explore.',body:uspContent},
  {id:'revenue',group:'THE NUMBERS',title:'Year one, three plans',intro:'Registration and date revenue. Three plans. One measured rollout.',body:revenueIntro},
