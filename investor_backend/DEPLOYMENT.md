@@ -1,4 +1,4 @@
-# Investor Room: email access release
+# Investor Room: SMS access release
 
 Prepared 25 November 2026. This release is local; it does not enable authentication on GitHub Pages.
 
@@ -25,7 +25,7 @@ Do not add the source proposal or secrets to Git. This release keeps the detaile
 
 In the existing Railway project, create a NEW service named `shuddhasangama-site` from `shuddhasangama/ShuddhaSangama`, root directory `/`. Do not change Dream-Sim, dhashu-admin or bgv-worker.
 
-Add a NEW dedicated PostgreSQL service for investor records. Do not use the app's database or the old SMS investor database: this release requires the new email schema. Attach a persistent volume to the website service at `/data` for private PDF uploads. PostgreSQL stores encrypted investor details and the proposal; the volume stores encrypted PDFs. Configure backups for both and retain the encryption key securely.
+Add a NEW dedicated PostgreSQL service for investor records. Do not use the app's database or any older investor database. Attach a persistent volume to the website service at `/data` for private PDF uploads. PostgreSQL stores encrypted investor details and the proposal; the volume stores encrypted PDFs. Configure backups for both and retain the encryption key securely.
 
 The root Dockerfile starts Gunicorn; railway.json runs `python investor_backend/manage.py init-db` before deployment. It creates the dedicated schema without deleting records. Health check: `/health`.
 
@@ -51,19 +51,27 @@ Set:
 | LOOKUP_KEY | Generated independent secret |
 | DATA_ENCRYPTION_KEY | Generated Fernet key; retain it for recovery |
 | PRIVATE_STORAGE | /data/documents |
-| TWILIO_ACCOUNT_SID | Account owning the Verify service |
+| TWILIO_ACCOUNT_SID | Account owning the Verify service (non-India numbers) |
 | TWILIO_AUTH_TOKEN | Its secret token |
-| TWILIO_VERIFY_SERVICE_SID | Verify service with email enabled |
+| TWILIO_VERIFY_SERVICE_SID | A Twilio Verify service with the SMS channel on and 6-digit codes. Use a service made for the Investor Room, not the app's `DhaShu` service. |
+| MSG91_AUTH_KEY | A NEW MSG91 Authkey named `investorRoom` with IP security off (India numbers). Do not reuse `dhashuBackend`; it is limited to fixed IPs. |
+| MSG91_TEMPLATE_ID | An approved OTP template ID, for example the DLT-verified `DhaShuSignup` template |
+| MSG91_COUNTRY_CODES | Optional. Country codes sent through MSG91, comma separated. Default `91`. Use `91,1` later to move US/Canada to MSG91. |
+| INVESTOR_SESSION_HOURS | Optional. Hours an investor stays signed in. Default 8, allowed 1 to 72. Admin sessions stay 1 hour. |
 
-Do not enable public-preview or SMS fallback. No SendGrid key is needed in the app when Twilio Verify owns the SendGrid integration. Configure Verify for six-digit codes. Local challenges expire after five minutes, allow five checks, and resend is limited to once per minute/eight per day per email. IP limits additionally apply. Only configure TRUST_PROXY=1 if exactly one trusted proxy supplies the client address and direct spoofed forwarding headers are prevented; leave unset otherwise (shared-IP throttling may be more restrictive).
+Do not enable public-preview. No email provider or SendGrid account is needed: sign-in codes go by SMS only. Configure Verify and the MSG91 template for six-digit codes. Local challenges expire after five minutes, allow five checks, and resend is limited to once per minute/eight per day per mobile number. IP limits additionally apply. Only configure TRUST_PROXY=1 if exactly one trusted proxy supplies the client address and direct spoofed forwarding headers are prevented; leave unset otherwise (shared-IP throttling may be more restrictive).
 
-## 3. Twilio + SendGrid
+## 3. SMS providers (MSG91 and Twilio Verify)
 
-In Twilio Verify, connect the SendGrid email integration to this Verify service. Configure the authenticated sender/domain and a dynamic template including `{{twilio_code}}`. Verify delivery to one approved Indian email and one approved US email; no Indian phone restriction applies to email login.
+The mobile number's country code decides the provider. Numbers starting +91 use MSG91 SendOTP. Every other number (US, Canada, UAE, Europe) uses Twilio Verify SMS. To move more countries to MSG91 later, change `MSG91_COUNTRY_CODES` only; no code change is needed.
 
-Official instructions: https://www.twilio.com/docs/verify/email
+MSG91: in Settings > Authkey create a separate key named `investorRoom` with IP security off. Keep the existing `dhashuBackend` key untouched. Use an OTP template that is verified by DLT (OTP > Templates), and put its ID in `MSG91_TEMPLATE_ID`. The code is generated and checked by MSG91.
 
-The application requires the provider's approved result for the exact verification SID. A send acceptance alone does not grant access. No emails are sent by deployment or by adding an investor.
+Twilio: in Verify > Services create `Investor Room SMS` with the SMS channel on and 6-digit codes. Check Verify > Fraud & Geo Permissions allows the countries your investors are in. The old `Investor Room Email` service is no longer used.
+
+The application requires the provider's approved result. For Twilio it must match the exact verification SID. A send acceptance alone does not grant access. No SMS is sent by deployment or by adding an investor.
+
+Before sharing the link, test one real number in each region you have investors: India, US, UAE and one European country. Roaming and eSIM users may not receive Indian SMS abroad; if that happens, replace the number in the admin directory for the trip.
 
 ## 4. Initialise your admin and private proposal
 
@@ -76,7 +84,7 @@ python investor_backend/manage.py admin
 
 Follow the prompts for a password (14+ characters) and a new authenticator entry. This is a separate founder login from the existing app admin; credentials are not automatically shared.
 
-Open `/admin/login`. Add approved investors with name, login email, contact number including country code, current company, base city and access duration. Email is required; phone/company/city can be recorded and edited. Approval verifies your permission to enter; OTP verifies control of the email. Revoke or renew access in the same directory.
+Open `/admin/login`. Add approved investors with name, login mobile number including country code (for example +91 or +1), email for contact only, current company, base city and access duration. The mobile number and email are both required and each must be unique. Investors sign in with the mobile number. Approval verifies your permission to enter; the SMS code verifies control of the number. Changing an investor's number in the directory moves their login to the new number and cancels any pending code. Revoke or renew access in the same directory.
 
 The Ask section links to `/room/ask`, which is private server-rendered content. Paste the approved proposal into the admin's Investment ask content editor; it is encrypted in the database. Or securely transfer the original HTML to the Railway service's temporary directory and run:
 
@@ -88,19 +96,21 @@ Do not commit that HTML. The importer adds a note about the older rollout in the
 
 ## 5. Connect the existing domain
 
-Generate a Railway temporary domain and verify the login/admin/public corporate pages first. Add `shuddhasangama.org` as a custom domain in Railway and follow Railway's exact DNS records at the current DNS provider. Preserve mail/MX/TXT records for SendGrid and company email. Disable the old GitHub Pages site so its alternate URL cannot bypass the gate. If www is used, configure it too.
+Generate a Railway temporary domain and verify the login/admin/public corporate pages first. Add `shuddhasangama.org` as a custom domain in Railway and follow Railway's exact DNS records at the current DNS provider. Preserve mail/MX/TXT records for company email. Disable the old GitHub Pages site so its alternate URL cannot bypass the gate. If www is used, configure it too.
 
 No Codemagic build, app-user deletion, app-database changes or app OTP switch is needed.
 
 ## 6. Release acceptance checks
 
 - Signed out: `/investors/`, `/investors/assets/room.js`, and `/investors/assets/DhaShu-financial-plan.xlsx` redirect to login. No private page content appears in the response.
-- Unapproved email: generic response, no provider email and no access.
-- Approved email: receive the code, verify, acknowledge access terms, enter the room.
+- Unapproved number: generic response, no SMS sent and no access.
+- Approved +91 number: receive the MSG91 SMS, verify, acknowledge access terms, enter the room.
+- Approved US, UAE and European numbers: receive the Twilio SMS and enter the room.
+- Typing an email address on the login page does not sign anyone in.
 - Wrong/expired/reused code fails; repeated sends are throttled.
 - Founder: open admin, add/edit contact details, preview room, renew/revoke access.
 - Revoke an investor while logged in: their next room/download request is denied.
 - Check Ask, Use of funds, benchmark accordion, roadmap, videos and Excel download.
 - Confirm the old GitHub Pages URL is disabled. Previously downloaded or public Git copies cannot be recalled.
 
-Local automated tests use a fake provider, not production email. Live email delivery, production PostgreSQL concurrency, DNS and SSL must be verified in the deployed environment before sharing the protected link.
+Local automated tests use fake providers, not real SMS. Live SMS delivery in each country, production PostgreSQL concurrency, DNS and SSL must be verified in the deployed environment before sharing the protected link.

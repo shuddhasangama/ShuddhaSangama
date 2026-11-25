@@ -11,7 +11,7 @@ from werkzeug.utils import secure_filename
 from werkzeug.middleware.proxy_fix import ProxyFix
 import pyotp
 from models import Base, Investor, Admin, LoginSession, Challenge, Event, Rate, Document, Section
-from provider import TwilioEmail, ProviderUnavailable
+from provider import SmsRouter, ProviderUnavailable
 
 TERMS = '2026-11-v1'
 INTERESTS = {'reviewing':'Still reviewing', 'liked':'I like the idea', 'not_for_me':'Not for me',
@@ -20,9 +20,12 @@ SECTIONS = {'idea':'The idea', 'product':'Product and progress', 'market':'Marke
             'financials':'Revenue and operating plan', 'ask':'Investment ask and use of funds', 'team':'Team and roadmap'}
 def now(): return int(time.time())
 def phone(value):
-    value = re.sub(r'[\s()\-]', '', value.strip())
-    if not re.fullmatch(r'\+91[6-9]\d{9}', value):
-        raise ValueError('Use an Indian mobile number with +91 and 10 digits.')
+    value = re.sub(r'[\s()\-.]', '', value.strip())
+    if value.startswith('00'): value = '+' + value[2:]
+    if not re.fullmatch(r'\+[1-9]\d{7,14}', value):
+        raise ValueError('Enter the mobile number with its country code, for example +91 98xxxxxxxx or +1 202 555 0123.')
+    if value.startswith('+91') and not re.fullmatch(r'\+91[6-9]\d{9}', value):
+        raise ValueError('Indian mobile numbers use +91 followed by 10 digits.')
     return value
 
 def email(value):
@@ -48,6 +51,8 @@ def create_app(config=None):
     if app.config['SECRET_KEY'] == app.config['LOOKUP_KEY']:
         raise RuntimeError('Secrets must be independent.')
     prod = app.config['APP_ENV'] == 'production'
+    try: session_hours = min(72, max(1, int(os.getenv('INVESTOR_SESSION_HOURS', '8'))))
+    except ValueError: session_hours = 8
     app.config['SESSION_COOKIE_SECURE'] = prod
     if prod and (not app.config['PUBLIC_URL'].startswith('https://') or not app.config['DATABASE_URL'].startswith(('postgresql','postgres:'))):
         raise RuntimeError('Production requires HTTPS and dedicated PostgreSQL.')
@@ -63,7 +68,7 @@ def create_app(config=None):
     if dburl.startswith('postgresql://'): dburl=dburl.replace('postgresql://','postgresql+psycopg://',1)
     engine=create_engine(dburl,pool_pre_ping=True)
     factory=sessionmaker(engine,expire_on_commit=False)
-    provider=app.config.get('OTP_PROVIDER') or TwilioEmail()
+    provider=app.config.get('OTP_PROVIDER') or SmsRouter()
     app.extensions.update(db=factory,engine=engine,enc=enc,dec=dec,digest=digest,fernet=fernet,storage=storage)
     def event(db,kind,iid=None,detail=None):
         db.add(Event(investor_id=iid,kind=kind,actor=getattr(g,'subject','anonymous'),at=now(),detail=enc(detail or {})))
@@ -94,7 +99,7 @@ def create_app(config=None):
         if old: db.execute(delete(LoginSession).where(LoginSession.id==digest(old)))
         session.clear(); token=secrets.token_urlsafe(32)
         session['auth']=token; session['csrf']=secrets.token_urlsafe(32)
-        db.add(LoginSession(id=digest(token),subject=subject,role=role,expires=now()+ (3600 if role=='admin' else 8*3600)))
+        db.add(LoginSession(id=digest(token),subject=subject,role=role,expires=now()+ (3600 if role=='admin' else session_hours*3600)))
 
     @app.before_request
     def setup():
@@ -161,12 +166,12 @@ def create_app(config=None):
     def login():
         if request.method=='POST':
             limited('send-ip:'+str(request.remote_addr),15,3600)
-            try: mobile=email(request.form.get('email',''))
+            try: mobile=phone(request.form.get('phone',''))
             except ValueError as ex: flash(str(ex)); return redirect(url_for('login'))
-            ph=digest(mobile); limited('send-phone:'+ph,1,60); limited('send-day:'+ph,8,86400)
+            ph=digest('phone:'+mobile); limited('send-phone:'+ph,1,60); limited('send-day:'+ph,8,86400)
             cid=secrets.token_urlsafe(32)
             with factory.begin() as db:
-                i=db.scalar(select(Investor).where(Investor.email_hash==ph).with_for_update())
+                i=db.scalar(select(Investor).where(Investor.phone_hash==ph).with_for_update())
                 iid=i.id if active(i) else None
                 request_id=None
                 if iid:
@@ -178,7 +183,7 @@ def create_app(config=None):
                         event(db,'otp_send_failed',iid); iid=None
                 db.add(Challenge(id=digest(cid),investor_id=iid,expires=now()+300,attempts=0,used=0,provider_sid=request_id))
             session['challenge']=cid
-            flash('If this email has active access and delivery is available, a code has been requested. It expires in 5 minutes.')
+            flash('If this number has active access and delivery is available, a code has been requested by SMS. It expires in 5 minutes.')
             return redirect(url_for('verify'))
         return render_template('login.html')
 
@@ -194,8 +199,9 @@ def create_app(config=None):
                     # Consume attempt before provider interaction; row lock serialises production requests.
                     ch.attempts+=1
                     i=db.get(Investor,ch.investor_id) if ch.investor_id else None
-                    if active(i) and re.fullmatch(r'\d{6}',otp):
-                        try: success=provider.verify(ch.provider_sid,otp)
+                    number=dec(i.details).get('phone','') if i else ''
+                    if active(i) and number and re.fullmatch(r'\d{6}',otp):
+                        try: success=provider.verify(ch.provider_sid,otp,number)
                         except ProviderUnavailable: success=False
                         if success:
                             ch.used=1; login_as(db,i.id,'investor'); event(db,'login',i.id)
@@ -296,15 +302,15 @@ def create_app(config=None):
     @app.post('/admin/investors')
     @require('admin')
     def add_investor():
-        try: mobile=email(request.form.get('email','')); days=int(request.form.get('days','30'))
+        try: mail=email(request.form.get('email','')); number=phone(request.form.get('phone','')); days=int(request.form.get('days','30'))
         except ValueError as ex: abort(400,description=str(ex))
         if not 1<=days<=365 or not request.form.get('name','').strip(): abort(400)
         with factory.begin() as db:
-            if db.scalar(select(Investor).where(Investor.email_hash==digest(mobile))):
-                flash('This email is already listed. Update its existing access.'); return redirect(url_for('admin'))
+            if db.scalar(select(Investor).where((Investor.phone_hash==digest('phone:'+number))|(Investor.email_hash==digest(mail)))):
+                flash('This number or email is already listed. Update the existing access.'); return redirect(url_for('admin'))
             iid=str(uuid.uuid4())
-            db.add(Investor(id=iid,phone_hash=digest('email:'+mobile),email_hash=digest(mobile),details=enc({'phone':request.form.get('phone','')[:30],'name':request.form['name'][:100],
-                'email':mobile,'organisation':request.form.get('organisation','')[:150],'city':request.form.get('city','')[:100]}),
+            db.add(Investor(id=iid,phone_hash=digest('phone:'+number),email_hash=digest(mail),details=enc({'phone':number,'name':request.form['name'][:100],
+                'email':mail,'organisation':request.form.get('organisation','')[:150],'city':request.form.get('city','')[:100]}),
                 status='approved',expires=now()+days*86400,created=now(),response=enc({}),notes=enc('')))
             db.flush(); event(db,'access_approved',iid)
         flash('Investor added. Share the Investor Room link manually; no invitation has been sent.')
@@ -323,9 +329,16 @@ def create_app(config=None):
             elif action=='renew': i.status='approved'; i.expires=now()+30*86400
             elif action=='profile':
                 person=dec(i.details)
-                for field,limit in [('name',100),('phone',30),('organisation',150),('city',100)]:
+                try: number=phone(request.form.get('phone',''))
+                except ValueError as ex: abort(400,description=str(ex))
+                taken=db.scalar(select(Investor).where(Investor.phone_hash==digest('phone:'+number),Investor.id!=iid))
+                if taken: abort(400,description='This number already belongs to another investor.')
+                for field,limit in [('name',100),('organisation',150),('city',100)]:
                     person[field]=request.form.get(field,'').strip()[:limit]
                 if not person['name']: abort(400)
+                if number!=person.get('phone'):
+                    db.execute(update(Challenge).where(Challenge.investor_id==iid).values(used=1))
+                person['phone']=number; i.phone_hash=digest('phone:'+number)
                 i.details=enc(person)
             elif action=='note': i.notes=enc(request.form.get('notes','')[:4000])
             elif action=='invitation_shared':
