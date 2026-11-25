@@ -29,3 +29,8 @@
 @media(max-width:620px){.ledger nav{display:block}.ledger nav .nav-group>summary{padding:12px 8px}}
 @media(max-width:620px){.num-table .table-wrap table,.plain-table .table-wrap table{min-width:0;width:100%}.num-table td,.num-table th,.plain-table td,.plain-table th{padding:12px 8px;font-size:13px}.num-table td:first-child,.num-table th:first-child{padding-left:0}.plain-table td:first-child{width:34%}.plain-table .cell-list{padding-left:16px}}
 @media(max-width:620px){.ask-summary{padding:6px 4px}.table-wrap.ask-summary table{min-width:0}.ask-summary th,.ask-summary td{padding:8px 6px}.ask-summary .figures td{font-size:22px}.ask-summary .notes td{font-size:11px}.ask-summary th{font-size:9px;letter-spacing:0}}
+.fold-hint{margin-left:14px;color:var(--muted);font-size:13px;font-weight:400}
+.gtm-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:4px 0 8px}.gtm-pt{border:1px solid var(--line);background:#0e1a2c;padding:12px 14px}.gtm-pt b{display:block;color:var(--gold);font:700 11px Arial,sans-serif;letter-spacing:.8px;text-transform:uppercase;margin-bottom:5px}.gtm-pt span{display:block;font-size:14px;line-height:1.5;color:var(--cream)}
+.fold .road-cards{margin-top:6px}.fold .road-card{padding:14px 16px}.fold .road-card h4{font-size:20px;margin:6px 0 8px}.fold .road-card li{font-size:14px;margin:4px 0}
+.num-table td,.plain-table td{padding:10px 12px}.num-table td:first-child,.plain-table td:first-child{padding-left:0}
+@media(max-width:620px){.fold-hint{display:block;margin:4px 0 0}.gtm-grid{grid-template-columns:1fr}.num-table td,.plain-table td{padding:10px 8px}}
