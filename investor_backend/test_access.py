@@ -298,3 +298,11 @@ def test_page_without_round_terms_has_no_data_block(env):
     app,c,p,i=env; seed_terms(app); login(c)
     status,html=page(c,'/investors/')
     assert status==200 and 'private-terms' not in html
+
+
+def test_sign_in_goes_straight_to_the_investor_room(env):
+    app,c,provider,iid=env
+    post(c,'/login',{'phone':'+1 (202) 555-0123'})
+    r=post(c,'/verify',{'otp':'123456'})
+    try: assert r.status_code==302 and r.headers['Location'].endswith('/investors/')
+    finally: r.close()

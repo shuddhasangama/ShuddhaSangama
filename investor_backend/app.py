@@ -239,7 +239,7 @@ def create_app(config=None):
                         if success:
                             ch.used=1; login_as(db,i.id,'investor'); event(db,'login',i.id)
                     if not success and ch.attempts>=5: ch.used=1
-            if success: return redirect(url_for('room'))
+            if success: return redirect(url_for('investor_site'))
             flash('Code could not be verified. Check the code and expiry, or request a new one.')
         return render_template('verify.html')
 
