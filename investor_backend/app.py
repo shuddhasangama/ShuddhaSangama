@@ -14,6 +14,7 @@ from models import Base, Investor, Admin, LoginSession, Challenge, Event, Rate, 
 from provider import SmsRouter, ProviderUnavailable
 
 TERMS = '2026-11-v1'
+TERMS_ID = 'terms_data'  # private round figures (JSON) for the Ask chapter; stored encrypted, never in Git
 INTERESTS = {'reviewing':'Still reviewing', 'liked':'I like the idea', 'not_for_me':'Not for me',
              'discussion':'I would like a discussion', 'invest':'I would like to invest'}
 SECTIONS = {'idea':'The idea', 'product':'Product and progress', 'market':'Market and launch plan',
@@ -27,6 +28,32 @@ def phone(value):
     if value.startswith('+91') and not re.fullmatch(r'\+91[6-9]\d{9}', value):
         raise ValueError('Indian mobile numbers use +91 followed by 10 digits.')
     return value
+
+def clean_terms(raw):
+    """Validate the private round terms so only plain text reaches the Investor Room page."""
+    if not isinstance(raw, dict): raise ValueError('Round terms must be a JSON object.')
+    def text(value, limit=300):
+        if not isinstance(value, str) or len(value) > limit: raise ValueError(f'Each value must be text of at most {limit} characters.')
+        return value.strip()
+    out = {}
+    for key in ('raising', 'price', 'valuation'):
+        if key in raw:
+            item = raw[key]
+            if not isinstance(item, dict) or set(item) - {'value', 'note'}: raise ValueError(f'"{key}" needs only "value" and "note".')
+            out[key] = {'value': text(item.get('value', ''), 60), 'note': text(item.get('note', ''), 120)}
+    for key in ('shareholder_note', 'holdings_note'):
+        if key in raw: out[key] = text(raw[key], 600)
+    for key, width in (('holdings', 3), ('terms', 2)):
+        if key in raw:
+            rows = raw[key]
+            if not isinstance(rows, list) or len(rows) > 20: raise ValueError(f'"{key}" must be a list of up to 20 rows.')
+            out[key] = []
+            for row in rows:
+                if not isinstance(row, list) or len(row) != width: raise ValueError(f'Each "{key}" row needs exactly {width} values.')
+                out[key].append([text(cell) for cell in row])
+    unknown = set(raw) - set(out)
+    if unknown: raise ValueError('Unknown field: ' + ', '.join(sorted(map(str, unknown))))
+    return out
 
 def email(value):
     value=value.strip().lower()
@@ -155,6 +182,12 @@ def create_app(config=None):
         html=(site/'investors/index.html').read_text(encoding='utf-8')
         html=html.replace('OPEN PREVIEW · NO SIGN-IN REQUIRED','APPROVED INVESTOR ACCESS')
         html=html.replace('</header>', '<a href="/room">Account &amp; private terms</a></header>')
+        with factory() as db: stored=db.get(Section,TERMS_ID)
+        try: terms=clean_terms(json.loads(dec(stored.body))) if stored else {}
+        except (ValueError, TypeError): terms={}
+        if terms:
+            data=json.dumps(terms,ensure_ascii=False).replace('<','\\u003c').replace('>','\\u003e').replace('&','\\u0026')
+            html=html.replace('</body>','<script type="application/json" id="private-terms">'+data+'</script></body>')
         return html
     @app.get('/investors/assets/<path:filename>')
     @require('investor')
@@ -239,7 +272,7 @@ def create_app(config=None):
     def content(slug):
         with factory.begin() as db:
             section=db.get(Section,slug)
-            if not section: abort(404)
+            if not section or slug==TERMS_ID: abort(404)
             event(db,'section_view',g.subject,{'section':slug})
         return render_template('content.html',section=section)
 
@@ -353,7 +386,11 @@ def create_app(config=None):
         with factory.begin() as db:
             c=db.get(Section,slug)
             if not c: abort(404)
-            c.body=enc(request.form.get('body','')[:30000]); event(db,'content_updated',detail={'section':slug})
+            body=request.form.get('body','')[:30000]
+            if slug==TERMS_ID:
+                try: body=json.dumps(clean_terms(json.loads(body or '{}')),ensure_ascii=False,indent=1)
+                except (ValueError, TypeError) as ex: abort(400,description='Round terms were not saved: '+str(ex))
+            c.body=enc(body); event(db,'content_updated',detail={'section':slug})
         flash('Content saved.'); return redirect(url_for('admin'))
 
     @app.post('/admin/documents')

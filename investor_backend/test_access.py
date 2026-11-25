@@ -5,7 +5,7 @@ import pytest
 from cryptography.fernet import Fernet
 from sqlalchemy import update, select, func
 from app import create_app, phone
-from models import Base, Investor, LoginSession, Admin, Challenge
+from models import Base, Investor, LoginSession, Admin, Challenge, Section
 
 SID='VE'+'a'*32
 
@@ -252,3 +252,49 @@ def test_session_length_is_configurable(tmp_path,monkeypatch):
         assert 23*3600 < record.expires-int(time.time()) <= 24*3600
     finally:
         app.extensions['engine'].dispose()
+
+
+TERMS_JSON='{"raising":{"value":"TEST-RAISE","note":"test cap note"},"price":{"value":"TEST-PRICE-777","note":"test price note"},"valuation":{"value":"TEST-VALUE","note":"after the money"},"shareholder_note":"You become a shareholder of record.","holdings":[["TEST-ROW-A","TEST-SHARES-9","TEST-PCT"]],"terms":[["Instrument","Equity shares, issued directly"]]}'
+
+def seed_terms(app):
+    ex=app.extensions
+    with ex['db'].begin() as db: db.add(Section(id='terms_data',title='Round terms data',body=ex['enc']('{}')))
+
+def page(c,path):
+    response=c.get(path)
+    try: return response.status_code,response.get_data(as_text=True)
+    finally: response.close()
+
+def test_round_terms_reach_signed_in_investors_only(env):
+    app,c,p,i=env; seed_terms(app)
+    admin=app.test_client(); admin_session(app,admin)
+    assert post(admin,'/admin/content/terms_data',{'body':TERMS_JSON}).status_code==302
+    assert page(c,'/investors/')[0]==302
+    login(c)
+    status,html=page(c,'/investors/')
+    assert status==200 and 'id="private-terms"' in html and 'TEST-PRICE-777' in html and 'test cap note' in html
+    assert page(c,'/room/terms_data')[0]==404
+    with app.extensions['db']() as db: stored=db.get(Section,'terms_data').body
+    assert 'TEST-PRICE-777' not in stored
+
+def test_round_terms_cannot_break_out_of_the_page(env):
+    app,c,p,i=env; seed_terms(app)
+    admin=app.test_client(); admin_session(app,admin)
+    evil='{"raising":{"value":"x","note":"</script><img src=x onerror=alert(1)>"},"price":{"value":"y","note":""},"valuation":{"value":"z","note":""}}'
+    assert post(admin,'/admin/content/terms_data',{'body':evil}).status_code==302
+    login(c)
+    status,html=page(c,'/investors/')
+    assert '</script><img' not in html and '\\u003c/script\\u003e' in html
+
+@pytest.mark.parametrize('body',['not json','[]','{"price":{"value":5,"note":""}}','{"surprise":1}','{"holdings":[["a","b"]]}','{"terms":[["a","b","c"]]}','{"holdings":'+str([["a","b","c"]]*21).replace("'",'"')+'}','{"raising":{"value":"x","note":"y","extra":"z"}}'])
+def test_bad_round_terms_are_refused_and_not_saved(env,body):
+    app,c,p,i=env; seed_terms(app)
+    admin=app.test_client(); admin_session(app,admin)
+    assert post(admin,'/admin/content/terms_data',{'body':body}).status_code==400
+    login(c); status,html=page(c,'/investors/')
+    assert status==200 and 'id="private-terms"' not in html
+
+def test_page_without_round_terms_has_no_data_block(env):
+    app,c,p,i=env; seed_terms(app); login(c)
+    status,html=page(c,'/investors/')
+    assert status==200 and 'private-terms' not in html

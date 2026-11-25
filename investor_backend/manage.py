@@ -13,7 +13,7 @@ def main():
         print('PRIVATE: store securely; never paste into chat or commit.')
         print('SECRET_KEY='+secrets.token_urlsafe(48)); print('LOOKUP_KEY='+secrets.token_urlsafe(48))
         print('DATA_ENCRYPTION_KEY='+Fernet.generate_key().decode()); return
-    from app import create_app, SECTIONS, now
+    from app import create_app, SECTIONS, now, TERMS_ID
     from models import Base, Admin, Section, Challenge, LoginSession, Rate
     app=create_app(); ext=app.extensions
     if args.command=='init-db':
@@ -22,6 +22,8 @@ def main():
             for slug,title in SECTIONS.items():
                 if not db.get(Section,slug):
                     db.add(Section(id=slug,title=title,body=ext['enc']('The founder will publish the approved material here.')))
+            if not db.get(Section,TERMS_ID):
+                db.add(Section(id=TERMS_ID,title='Round terms data (private JSON for the Ask chapter)',body=ext['enc']('{}')))
         print('Dedicated Investor Room schema ready. Existing data preserved.'); return
     if args.command=='admin':
         user=input('Admin username: ').strip()

@@ -114,3 +114,14 @@ No Codemagic build, app-user deletion, app-database changes or app OTP switch is
 - Confirm the old GitHub Pages URL is disabled. Previously downloaded or public Git copies cannot be recalled.
 
 Local automated tests use fake providers, not real SMS. Live SMS delivery in each country, production PostgreSQL concurrency, DNS and SSL must be verified in the deployed environment before sharing the protected link.
+
+### Round terms for the Ask chapter (private)
+
+The Ask chapter shows the raise, price per share, valuation, holdings table and the terms table to signed-in investors only. These figures are confidential and must never be committed to Git. They live in the encrypted database as one JSON record.
+
+1. If the admin page has no "Round terms data" editor, run `python investor_backend/manage.py init-db` once in the Railway console. It only adds the missing record.
+2. Open `/admin/login`, then Publish approved content, then "Round terms data (private JSON for the Ask chapter)". Paste the JSON and save.
+3. Keys allowed: `raising`, `price`, `valuation` (each `{"value": "...", "note": "..."}`), `shareholder_note`, `holdings_note`, `holdings` (rows of 3: investment, shares, holding) and `terms` (rows of 2: term, position). Any other key is refused and nothing is saved.
+4. Until it is saved, the chapter says the figures are shared privately. Anyone who is not signed in never receives them.
+
+Have your CA or lawyer review the figures and the terms wording before any investor sees them.
