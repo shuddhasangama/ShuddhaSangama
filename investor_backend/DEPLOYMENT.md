@@ -82,7 +82,7 @@ cd /app
 python investor_backend/manage.py admin
 ```
 
-Follow the prompts for a password (14+ characters) and a new authenticator entry. This is a separate founder login from the existing app admin; credentials are not automatically shared.
+Follow the prompts for a password (12+ characters) and a new authenticator entry. This is a separate founder login from the existing app admin; credentials are not automatically shared.
 
 Open `/admin/login`. Add approved investors with name, login mobile number including country code (for example +91 or +1), email for contact only, current company, base city and access duration. The mobile number and email are both required and each must be unique. Investors sign in with the mobile number. Approval verifies your permission to enter; the SMS code verifies control of the number. Changing an investor's number in the directory moves their login to the new number and cancels any pending code. Revoke or renew access in the same directory.
 

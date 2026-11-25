@@ -26,8 +26,8 @@ def main():
     if args.command=='admin':
         user=input('Admin username: ').strip()
         if not user or len(user)>80: raise SystemExit('Invalid username')
-        password=getpass.getpass('New password (at least 14 characters): ')
-        if len(password)<14 or password!=getpass.getpass('Repeat password: '): raise SystemExit('Password validation failed')
+        password=getpass.getpass('New password (at least 12 characters): ')
+        if len(password)<12 or password!=getpass.getpass('Repeat password: '): raise SystemExit('Password validation failed')
         secret=pyotp.random_base32(); totp=pyotp.TOTP(secret)
         print('PRIVATE authenticator setup key:',secret)
         print('Enter this key in your authenticator app for ShuddhaSangama Investor Room.')
