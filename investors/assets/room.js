@@ -17,9 +17,10 @@ const chapters=[
  {id:'product',group:'UNDERSTAND',title:'What is built today',intro:'Tested on Android and iOS. Preparing for production.',body:productContent},
  {id:'difference',group:'UNDERSTAND',title:'Why this is different',intro:'Eight reasons to choose DhaShu. Tap to explore.',body:uspContent},
  {id:'revenue',group:'THE NUMBERS',title:'Year one, three plans',intro:'Registration and date revenue. Three plans. One measured rollout.',body:revenueIntro},
- {id:'gtm',group:'THE NUMBERS',title:'How we reach people',intro:'An India operating model and a staged international expansion plan.',body:globalPlan},
+ {id:'gtm',group:'THE NUMBERS',title:'How we reach people',intro:'Create awareness. Earn trust. Convert intent into paid membership.',body:globalPlan},
  {id:'roadmap',group:'THE NUMBERS',title:'The road ahead',intro:'Strengthen the first markets. Build Guru. Earn the right to expand.',body:roadmapContent},
- {id:'ask',group:'BEFORE YOU DECIDE',title:'Use of funds & the ask',intro:'Fund the next stage of DhaShu.',body:fundingContent},
+ {id:'ask',group:'BEFORE YOU DECIDE',title:'The ask',intro:'A first round to take DhaShu to market.',body:askContent},
+ {id:'funds',group:'BEFORE YOU DECIDE',title:'Use of funds',intro:'Where the capital goes, and what it supports.',body:fundingContent},
  {id:'risks',group:'BEFORE YOU DECIDE',title:'What needs to go right',intro:'A useful investor conversation includes the dependencies and the work still ahead.',body:()=>rows([
  ['Local matching liquidity','Enough mutually compatible, available people must be present in each launch market. Registrations alone do not ensure dates.'],
  ['Provider readiness','Identity, background-check, OTP and reservation providers introduce approval, cost, coverage and availability dependencies.'],

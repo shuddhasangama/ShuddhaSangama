@@ -1,0 +1,9 @@
+.git
+private
+**/__pycache__
+**/.pytest_cache
+**/.venv
+**/.env
+**/*.db
+**/test_*.py
+tests
