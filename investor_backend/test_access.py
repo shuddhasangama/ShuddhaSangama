@@ -5,7 +5,7 @@ import pytest
 from cryptography.fernet import Fernet
 from sqlalchemy import update, select, func
 from app import create_app, phone
-from models import Base, Investor, LoginSession, Admin, Challenge, Section
+from models import Base, Investor, LoginSession, Admin, Challenge, Section, Event
 
 SID='VE'+'a'*32
 
@@ -306,3 +306,71 @@ def test_sign_in_goes_straight_to_the_investor_room(env):
     r=post(c,'/verify',{'otp':'123456'})
     try: assert r.status_code==302 and r.headers['Location'].endswith('/investors/')
     finally: r.close()
+
+
+def stand(c,fields):
+    # Same-origin fetch from the Room page: form-encoded, csrf taken from the injected meta tag.
+    page=c.get('/investors/'); html=page.data.decode(); page.close()
+    token=html.split('name="csrf-token" content="',1)[1].split('"',1)[0]
+    return c.post('/investors/response',data=dict(csrf=token,**fields))
+
+def test_room_page_carries_csrf_and_saved_choice(env):
+    app,c,p,i=env; login(c)
+    response=c.get('/investors/'); html=response.data.decode(); response.close()
+    assert 'name="csrf-token"' in html and 'id="my-response"' in html and 'id="stand"' in html
+    assert 'Reclaim' not in html and 'id="interest"' not in html
+
+def test_room_response_requires_login_and_csrf(env):
+    app,c,p,i=env
+    assert c.post('/investors/response',data={'interest':'invest','amount':'50000'}).status_code==400
+    assert post(c,'/investors/response',{'interest':'invest','amount':'50000'}).status_code==302
+    login(c)
+    assert c.post('/investors/response',data={'interest':'invest','amount':'50000'}).status_code==400
+
+def test_room_response_records_choice_and_amount(env):
+    app,c,p,i=env; login(c)
+    r=stand(c,{'interest':'invest','amount':'200000'}); assert r.status_code==200 and r.get_json()['ok'] is True
+    with app.extensions['db']() as db:
+        inv=db.get(Investor,i); assert inv.interest=='invest'
+        assert app.extensions['dec'](inv.response)['amount_inr']==200000
+        assert db.scalar(select(func.count()).select_from(Event).where(Event.kind=='interest_updated',Event.investor_id==i))==1
+    r=stand(c,{'interest':'idea_no_invest','amount':''}); assert r.status_code==200
+    with app.extensions['db']() as db:
+        inv=db.get(Investor,i); assert inv.interest=='idea_no_invest'
+        assert app.extensions['dec'](inv.response)['amount_inr'] is None
+
+def test_room_response_rejects_other_values(env):
+    app,c,p,i=env; login(c)
+    assert stand(c,{'interest':'invest','amount':''}).status_code==400
+    assert stand(c,{'interest':'invest','amount':'2500000'}).status_code==400
+    assert stand(c,{'interest':'invest','amount':'-1'}).status_code==400
+    assert stand(c,{'interest':'discussion','amount':''}).status_code==400
+    with app.extensions['db']() as db: assert db.get(Investor,i).interest=='reviewing'
+
+def test_room_response_keeps_room_form_details(env):
+    app,c,p,i=env; login(c)
+    post(c,'/response',{'interest':'discussion','amount':'750000','decision':'2026-12-20T10:30','questions':'Terms?'})
+    assert stand(c,{'interest':'invest','amount':'100000'}).status_code==200
+    with app.extensions['db']() as db:
+        saved=app.extensions['dec'](db.get(Investor,i).response)
+    assert saved['amount_inr']==100000 and saved['decision_ist']=='2026-12-20T10:30' and saved['questions']=='Terms?'
+
+def test_admin_list_shows_invited_accessed_last_access_and_option(env):
+    app,c,p,i=env
+    admin=app.test_client(); admin_session(app,admin)
+    page=admin.get('/admin'); html=page.data.decode(); page.close()
+    assert 'Latest 100' not in html and 'Investor directory' not in html
+    assert 'Not recorded' in html and 'No response yet' in html and '<td>No</td>' in html
+    post(admin,'/admin/investors/'+i,dict(action='invitation_shared',channel='email',message='sent'))
+    login(c); stand(c,{'interest':'invest','amount':'500000'})
+    page=admin.get('/admin'); html=page.data.decode(); page.close()
+    assert 'Yes · ' in html and 'IST' in html
+    assert 'Yes · 2 visits' in html or 'Yes · 1 visit' in html
+    assert 'I would like to invest · ₹5,00,000' in html
+    assert 'Revoke access now' in html  # management controls are still reachable
+
+def test_inr_and_ist_filters(env):
+    app,c,p,i=env
+    f=app.jinja_env.filters
+    assert f['inr'](50000)=='₹50,000' and f['inr'](100000)=='₹1,00,000' and f['inr'](2500000)=='₹25,00,000' and f['inr'](None)=='—'
+    assert f['ist'](0)=='—' and f['ist'](86400).endswith('IST') and f['date'](None)=='—'

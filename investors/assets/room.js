@@ -3,8 +3,8 @@ const films={
  idea:{title:'The idea',label:'PRODUCT VISION',caption:'Why DhaShu exists, and the journey we are building.',src:'https://dhashu.com/media/idea-20261113.mp4',poster:'./assets/idea.webp'},
  calendar:{title:'Your dating week',label:'PRODUCT EXPLAINER',caption:'A little structure. Real time to meet.',src:'https://dhashu.com/media/dating-calendar-20261113.mp4',poster:'./assets/calendar.webp'},
  app:{title:'Inside the app',label:'PRODUCT WALKTHROUGH',caption:'From your profile to REACH and date planning.',src:'https://dhashu.com/media/dating-app-20261113.mp4',poster:'./assets/app.webp'},
- ryl:{title:'Reclaim your life (#RYL)',label:'CAMPAIGN CONCEPT',caption:'A creative route for introducing the brand.',src:'./assets/marketing-ryl.mp4',poster:'./assets/ryl.jpg'},
- myb:{title:'Mind your Business (#MYB)',label:'CAMPAIGN CONCEPT',caption:'Another angle on the conversation.',src:'./assets/marketing-myb.mp4',poster:'./assets/myb.jpg'}
+ myb:{title:'Mind your Business (#MYB)',label:'CAMPAIGN CONCEPT',caption:'Another angle on the conversation.',src:'./assets/marketing-myb.mp4',poster:'./assets/myb.jpg'},
+ consent:{title:'#Consent',label:'MARKETING',caption:'One date, two stories. Consent built in: invitations and contact sharing wait for a yes.',src:'./assets/marketing-consent.mp4',poster:'./assets/consent.jpg'}
 };
 const rows=(items)=>items.map(([title,copy],i)=>`<div class="feature-row"><b>0${i+1}</b><div><h3>${title}</h3><p>${copy}</p></div></div>`).join('');
 const table=(heads,data)=>`<div class="table-wrap"><table><thead><tr>${heads.map(x=>`<th scope="col">${x}</th>`).join('')}</tr></thead><tbody>${data.map(row=>`<tr>${row.map(x=>`<td>${x}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
@@ -37,11 +37,34 @@ function showChapter(id,focus=false){const index=chapters.findIndex(c=>c.id===id
 showChapter(chapters.some(c=>c.id===location.hash.slice(1))?location.hash.slice(1):'revenue');window.addEventListener('hashchange',()=>showChapter(location.hash.slice(1),true));
 const filmCards=entries=>entries.map(([id,f])=>`<button class="film-card" data-film="${id}" aria-label="Play ${f.title}"><span class="film-poster"><img src="${f.poster}" alt="" loading="lazy"><span class="play-disc">▶</span></span><small>${f.label}</small><strong>${f.title}</strong><span class="caption">${f.caption}</span></button>`).join('');
 document.querySelector('#film-grid').innerHTML=filmCards(Object.entries(films).filter(([id])=>['idea','calendar','app'].includes(id)));
-document.querySelector('#marketing-film-grid').innerHTML=filmCards(Object.entries(films).filter(([id])=>['ryl','myb','start'].includes(id)));
+document.querySelector('#marketing-film-grid').innerHTML=filmCards(['myb','start','consent'].map(id=>[id,films[id]]));
 const dialog=document.querySelector('#film-dialog'),player=document.querySelector('#player'),error=document.querySelector('#video-error');
 document.addEventListener('click',event=>{const button=event.target.closest('[data-film]');if(button){const f=films[button.dataset.film];document.querySelector('#film-title').textContent=f.title;player.src=f.src;player.poster=f.poster;error.hidden=true;dialog.showModal();player.play().catch(()=>{});}const tab=event.target.closest('[data-case]');if(tab){document.querySelectorAll('[data-case]').forEach(b=>{b.setAttribute('aria-selected',String(b===tab));b.tabIndex=b===tab?0:-1;});document.querySelector('#scenario-panel').setAttribute('aria-labelledby',tab.id);document.querySelector('#scenario-panel').innerHTML=scenario(tab.dataset.case);}});
 document.querySelector('#close-video').addEventListener('click',()=>dialog.close());dialog.addEventListener('close',()=>{player.pause();player.removeAttribute('src');player.load();});player.addEventListener('error',()=>error.hidden=false);
 document.querySelector('#expand-video').addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else if(dialog.requestFullscreen)await dialog.requestFullscreen();else if(player.webkitEnterFullscreen)player.webkitEnterFullscreen();}catch{}});document.addEventListener('fullscreenchange',()=>document.querySelector('#expand-video').textContent=document.fullscreenElement?'Minimise':'Expand');
-document.querySelector('#interest').addEventListener('change',event=>{document.querySelector('#email-link').href='mailto:office@shuddhasangama.org?subject='+encodeURIComponent('DhaShu — '+event.target.value)+'&body='+encodeURIComponent('Hello,\n\nI would like to '+event.target.value.toLowerCase()+'.\n\nName:\nPreferred contact:\nQuestions:\n');});
+(function(){
+ const box=document.querySelector('#stand');if(!box)return;
+ const token=document.querySelector('meta[name="csrf-token"]'),offline=document.querySelector('#stand-offline'),amountWrap=document.querySelector('#amount-wrap'),status=document.querySelector('#stand-status'),save=document.querySelector('#save-stand');
+ if(!token){box.hidden=true;offline.hidden=false;return;}
+ const pick=name=>{const el=box.querySelector('input[name="'+name+'"]:checked');return el?el.value:'';};
+ const sync=()=>{amountWrap.hidden=pick('stand')!=='invest';status.textContent='';};
+ box.addEventListener('change',sync);
+ try{const mine=JSON.parse(document.querySelector('#my-response').textContent);
+  const r=box.querySelector('input[name="stand"][value="'+mine.interest+'"]');
+  if(r){r.checked=true;if(mine.interest==='invest'&&mine.amount){const a=box.querySelector('input[name="amount"][value="'+mine.amount+'"]');if(a)a.checked=true;}}}catch{}
+ sync();
+ save.addEventListener('click',async()=>{
+  const interest=pick('stand'),amount=pick('amount');
+  if(!interest){status.textContent='Please choose one of the two options.';return;}
+  if(interest==='invest'&&!amount){status.textContent='Please choose an indicative amount.';return;}
+  save.disabled=true;status.textContent='Recording…';
+  try{
+   const res=await fetch('/investors/response',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({csrf:token.content,interest,amount:interest==='invest'?amount:''})});
+   const ok=res.ok&&(res.headers.get('content-type')||'').includes('json');
+   status.textContent=ok?'Recorded. Thank you. This is non-binding, and the founders will be in touch.':'We could not record this. Please refresh the page and try again.';
+  }catch{status.textContent='We could not record this. Please check your connection and try again.';}
+  save.disabled=false;
+ });
+})();
 
 document.addEventListener('keydown',event=>{if(!event.target.matches('[data-case]')||!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const tabs=[...document.querySelectorAll('[data-case]')],index=tabs.indexOf(event.target);const next=event.key==='Home'?0:event.key==='End'?tabs.length-1:(index+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;tabs[next].focus();tabs[next].click();});

@@ -1,8 +1,8 @@
 import os, re, json, time, secrets, hashlib, hmac, uuid, io
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from functools import wraps
-from flask import Flask, request, session, g, render_template, redirect, url_for, abort, flash, send_file
+from flask import Flask, request, session, g, render_template, redirect, url_for, abort, flash, send_file, jsonify
 from sqlalchemy import create_engine, select, update, delete, func
 from sqlalchemy.orm import sessionmaker
 from cryptography.fernet import Fernet
@@ -16,7 +16,10 @@ from provider import SmsRouter, ProviderUnavailable
 TERMS = '2026-11-v1'
 TERMS_ID = 'terms_data'  # private round figures (JSON) for the Ask chapter; stored encrypted, never in Git
 INTERESTS = {'reviewing':'Still reviewing', 'liked':'I like the idea', 'not_for_me':'Not for me',
-             'discussion':'I would like a discussion', 'invest':'I would like to invest'}
+             'discussion':'I would like a discussion', 'invest':'I would like to invest',
+             'idea_no_invest':'Good idea, not investing'}
+# Indicative amounts offered in the Room's "next conversation" block (INR). Larger conversations are held separately.
+STAND_AMOUNTS = {'50000','100000','200000','500000'}
 SECTIONS = {'idea':'The idea', 'product':'Product and progress', 'market':'Market and launch plan',
             'financials':'Revenue and operating plan', 'ask':'Investment ask and use of funds', 'team':'Team and roadmap'}
 def now(): return int(time.time())
@@ -154,7 +157,19 @@ def create_app(config=None):
     @app.context_processor
     def context(): return dict(csrf=session['csrf'],interests=INTERESTS,sections=SECTIONS,dec=dec)
     @app.template_filter('date')
-    def date(value): return datetime.fromtimestamp(value,timezone.utc).strftime('%d %b %Y %H:%M UTC') if value else 'â€”'
+    def date(value): return datetime.fromtimestamp(value,timezone.utc).strftime('%d %b %Y %H:%M UTC') if value else '—'
+    @app.template_filter('ist')
+    def ist(value): return datetime.fromtimestamp(value,timezone(timedelta(hours=5,minutes=30))).strftime('%d %b %Y, %H:%M IST') if value else '—'
+    @app.template_filter('inr')
+    def inr(value):
+        if value in (None,''): return '—'
+        digits=str(int(value))
+        if len(digits)<=3: return '₹'+digits
+        head,tail=digits[:-3],digits[-3:]
+        groups=[]
+        while len(head)>2: groups.insert(0,head[-2:]); head=head[:-2]
+        if head: groups.insert(0,head)
+        return '₹'+','.join(groups+[tail])
     @app.errorhandler(400)
     @app.errorhandler(403)
     @app.errorhandler(404)
@@ -182,6 +197,11 @@ def create_app(config=None):
         html=(site/'investors/index.html').read_text(encoding='utf-8')
         html=html.replace('OPEN PREVIEW · NO SIGN-IN REQUIRED','APPROVED INVESTOR ACCESS')
         html=html.replace('</header>', '<a href="/room">Account &amp; private terms</a></header>')
+        if g.role=='investor':
+            mine=dec(g.investor.response)
+            mine_json=json.dumps({'interest':g.investor.interest,'amount':str(mine.get('amount_inr') or '')}).replace('<','\\u003c').replace('>','\\u003e').replace('&','\\u0026')
+            html=html.replace('</head>','<meta name="csrf-token" content="'+session['csrf']+'"></head>')
+            html=html.replace('</body>','<script type="application/json" id="my-response">'+mine_json+'</script></body>')
         with factory() as db: stored=db.get(Section,TERMS_ID)
         try: terms=clean_terms(json.loads(dec(stored.body))) if stored else {}
         except (ValueError, TypeError): terms={}
@@ -259,6 +279,22 @@ def create_app(config=None):
             return redirect(url_for('investor_site'))
         return render_template('consent.html')
 
+    @app.post('/investors/response')
+    @require('investor')
+    def stand():
+        # Two choices from the Room's next-conversation block. Writes the same record as the /room form.
+        interest=request.form.get('interest','')
+        if interest not in ('idea_no_invest','invest'): abort(400)
+        amount=request.form.get('amount','').strip()
+        if interest=='invest' and amount not in STAND_AMOUNTS: abort(400,description='Choose an indicative amount.')
+        value=int(amount) if interest=='invest' else None
+        with factory.begin() as db:
+            i=db.get(Investor,g.subject)
+            payload={**dec(i.response),'amount_inr':value}  # keeps any decision date and questions saved on /room
+            i.interest=interest; i.response=enc(payload)
+            event(db,'interest_updated',i.id,{'interest':interest,'amount_inr':value,'source':'investor_room'})
+        return jsonify(ok=True)
+
     @app.get('/room')
     @require('investor')
     def room():
@@ -325,12 +361,13 @@ def create_app(config=None):
     def admin():
         with factory() as db:
             investors=db.scalars(select(Investor).order_by(Investor.created.desc())).all()
-            events=db.scalars(select(Event).order_by(Event.at.desc(),Event.id.desc()).limit(100)).all()
             content=db.scalars(select(Section)).all(); docs=db.scalars(select(Document)).all()
             stats={kind:count for kind,count in db.execute(select(Event.kind,func.count(func.distinct(Event.investor_id))).group_by(Event.kind))}
             visits={iid:{'count':count,'first':first,'last':last} for iid,count,first,last in db.execute(
                 select(Event.investor_id,func.count(Event.id),func.min(Event.at),func.max(Event.at)).where(Event.kind=='room_visit').group_by(Event.investor_id))}
-        return render_template('admin.html',investors=investors,events=events,content=content,docs=docs,stats=stats,visits=visits,now=now(),public_url=app.config['PUBLIC_URL'])
+            invited={iid:at for iid,at in db.execute(
+                select(Event.investor_id,func.max(Event.at)).where(Event.kind=='invitation_shared').group_by(Event.investor_id))}
+        return render_template('admin.html',investors=investors,content=content,docs=docs,stats=stats,visits=visits,invited=invited,now=now(),public_url=app.config['PUBLIC_URL'])
 
     @app.post('/admin/investors')
     @require('admin')
