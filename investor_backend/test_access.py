@@ -366,7 +366,7 @@ def test_admin_list_shows_invited_accessed_last_access_and_option(env):
     page=admin.get('/admin'); html=page.data.decode(); page.close()
     assert 'Yes · ' in html and 'IST' in html
     assert 'Yes · 2 visits' in html or 'Yes · 1 visit' in html
-    assert 'I would like to invest · ₹5,00,000' in html
+    assert 'Interesting idea, would like to invest · ₹5,00,000' in html
     assert 'Revoke access now' in html  # management controls are still reachable
 
 def test_inr_and_ist_filters(env):
@@ -374,3 +374,24 @@ def test_inr_and_ist_filters(env):
     f=app.jinja_env.filters
     assert f['inr'](50000)=='₹50,000' and f['inr'](100000)=='₹1,00,000' and f['inr'](2500000)=='₹25,00,000' and f['inr'](None)=='—'
     assert f['ist'](0)=='—' and f['ist'](86400).endswith('IST') and f['date'](None)=='—'
+
+
+def test_admin_sees_preview_of_the_two_options_without_saving(env):
+    app,c,p,i=env; admin_session(app,c)
+    page=c.get('/investors/'); html=page.data.decode(); page.close()
+    assert 'name="csrf-token"' not in html and 'id="my-response"' not in html
+    assert 'Interesting idea, not ready to invest yet' in html and 'Interesting idea, would like to invest' in html
+    assert 'id="stand-preview"' in html and 'Tell us where' in html
+    assert 'Interested in what' not in html and 'id="email-link"' in html
+    r=post(c,'/investors/response',{'interest':'invest','amount':'50000'})
+    assert r.status_code==302  # admin sessions cannot record an investor response
+
+def test_admin_list_wording_for_both_choices(env):
+    app,c,p,i=env; login(c)
+    admin=app.test_client(); admin_session(app,admin)
+    stand(c,{'interest':'idea_no_invest','amount':''})
+    page=admin.get('/admin'); html=page.data.decode(); page.close()
+    assert 'Interesting idea, not ready to invest yet' in html
+    stand(c,{'interest':'invest','amount':'50000'})
+    page=admin.get('/admin'); html=page.data.decode(); page.close()
+    assert 'Interesting idea, would like to invest · ₹50,000' in html

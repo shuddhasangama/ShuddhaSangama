@@ -16,8 +16,8 @@ from provider import SmsRouter, ProviderUnavailable
 TERMS = '2026-11-v1'
 TERMS_ID = 'terms_data'  # private round figures (JSON) for the Ask chapter; stored encrypted, never in Git
 INTERESTS = {'reviewing':'Still reviewing', 'liked':'I like the idea', 'not_for_me':'Not for me',
-             'discussion':'I would like a discussion', 'invest':'I would like to invest',
-             'idea_no_invest':'Good idea, not investing'}
+             'discussion':'I would like a discussion', 'invest':'Interesting idea, would like to invest',
+             'idea_no_invest':'Interesting idea, not ready to invest yet'}
 # Indicative amounts offered in the Room's "next conversation" block (INR). Larger conversations are held separately.
 STAND_AMOUNTS = {'50000','100000','200000','500000'}
 SECTIONS = {'idea':'The idea', 'product':'Product and progress', 'market':'Market and launch plan',

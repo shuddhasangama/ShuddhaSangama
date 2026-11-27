@@ -34,15 +34,14 @@
 .fold .road-cards{margin-top:6px}.fold .road-card{padding:14px 16px}.fold .road-card h4{font-size:20px;margin:6px 0 8px}.fold .road-card li{font-size:14px;margin:4px 0}
 .num-table td,.plain-table td{padding:10px 12px}.num-table td:first-child,.plain-table td:first-child{padding-left:0}
 @media(max-width:620px){.fold-hint{display:block;margin:4px 0 0}.gtm-grid{grid-template-columns:1fr}.num-table td,.plain-table td{padding:10px 8px}}
-.stand{border:0;margin:26px 0 0;padding:0;min-width:0}.stand legend{font-size:12px;color:var(--muted);padding:0;margin-bottom:12px}
-.contact .stand-option,.contact .amount-option{display:flex;align-items:flex-start;gap:12px;margin:0 0 10px;padding:14px 16px;border:1px solid var(--line);background:var(--panel);color:var(--cream);font-size:15px;cursor:pointer}
-.contact .stand-option:hover,.contact .amount-option:hover{border-color:var(--blue)}
-.contact .stand-option:has(input:checked),.contact .amount-option:has(input:checked){border-color:var(--blue);background:#15253d}
+.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.stand{border:0;margin:26px 0 0;padding:0;min-width:0}
+.contact .stand-option{display:flex;align-items:flex-start;gap:12px;margin:0 0 10px;padding:14px 16px;border:1px solid var(--line);background:var(--panel);color:var(--cream);font-size:15px;cursor:pointer}
+.contact .stand-option:hover{border-color:var(--blue)}.contact .stand-option:has(input:checked){border-color:var(--blue);background:#15253d}
 .stand input[type=radio]{margin:3px 0 0;accent-color:var(--blue);flex:none}
-.stand .amount-wrap{margin:6px 0 18px}.stand .amount-title{font-size:13px;margin:0 0 10px}
-.stand .amount-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
-.contact .amount-option{margin:0;align-items:center;justify-content:center;padding:12px 8px}.contact .amount-option span{font-weight:600}
-.stand button.button{border:0;cursor:pointer;font-family:inherit}.stand button.button:disabled{opacity:.6;cursor:wait}
-.stand input:focus-visible,.stand button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.stand .amount-wrap{margin:14px 0 18px}.contact .amount-wrap label{font-size:13px;margin:0 0 8px}
+.stand select{width:100%;max-width:340px;background:var(--panel);color:var(--cream);border:1px solid var(--line);padding:13px 14px;font:inherit;font-size:15px}
+.stand input:focus-visible,.stand select:focus-visible,.stand button:focus-visible,.stand-next a:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.stand button.button{border:0;cursor:pointer;font-family:inherit}.stand button.button:disabled{opacity:.55;cursor:not-allowed}
 .stand-status{min-height:20px;margin:14px 0 0;font-size:14px;color:var(--gold)}
-@media(max-width:560px){.stand .amount-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.stand-next{margin-top:18px;padding:16px;border:1px solid var(--line);background:var(--panel);max-width:530px}.stand-next p{margin:0 0 12px;font-size:14px}

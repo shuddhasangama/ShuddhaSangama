@@ -3,7 +3,7 @@ const films={
  idea:{title:'The idea',label:'PRODUCT VISION',caption:'Why DhaShu exists, and the journey we are building.',src:'https://dhashu.com/media/idea-20261113.mp4',poster:'./assets/idea.webp'},
  calendar:{title:'Your dating week',label:'PRODUCT EXPLAINER',caption:'A little structure. Real time to meet.',src:'https://dhashu.com/media/dating-calendar-20261113.mp4',poster:'./assets/calendar.webp'},
  app:{title:'Inside the app',label:'PRODUCT WALKTHROUGH',caption:'From your profile to REACH and date planning.',src:'https://dhashu.com/media/dating-app-20261113.mp4',poster:'./assets/app.webp'},
- myb:{title:'Mind your Business (#MYB)',label:'CAMPAIGN CONCEPT',caption:'Another angle on the conversation.',src:'./assets/marketing-myb.mp4',poster:'./assets/myb.jpg'},
+ myb:{title:'Mind your Business (#MYB)',label:'CAMPAIGN CONCEPT',caption:'Only your matches see you. Mind your business.',src:'./assets/marketing-myb.mp4',poster:'./assets/myb.jpg'},
  consent:{title:'#Consent',label:'MARKETING',caption:'One date, two stories. Consent built in: invitations and contact sharing wait for a yes.',src:'./assets/marketing-consent.mp4',poster:'./assets/consent.jpg'}
 };
 const rows=(items)=>items.map(([title,copy],i)=>`<div class="feature-row"><b>0${i+1}</b><div><h3>${title}</h3><p>${copy}</p></div></div>`).join('');
@@ -44,25 +44,35 @@ document.querySelector('#close-video').addEventListener('click',()=>dialog.close
 document.querySelector('#expand-video').addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else if(dialog.requestFullscreen)await dialog.requestFullscreen();else if(player.webkitEnterFullscreen)player.webkitEnterFullscreen();}catch{}});document.addEventListener('fullscreenchange',()=>document.querySelector('#expand-video').textContent=document.fullscreenElement?'Minimise':'Expand');
 (function(){
  const box=document.querySelector('#stand');if(!box)return;
- const token=document.querySelector('meta[name="csrf-token"]'),offline=document.querySelector('#stand-offline'),amountWrap=document.querySelector('#amount-wrap'),status=document.querySelector('#stand-status'),save=document.querySelector('#save-stand');
- if(!token){box.hidden=true;offline.hidden=false;return;}
- const pick=name=>{const el=box.querySelector('input[name="'+name+'"]:checked');return el?el.value:'';};
- const sync=()=>{amountWrap.hidden=pick('stand')!=='invest';status.textContent='';};
+ const CONTACT='office@shuddhasangama.org';
+ const LABELS={idea_no_invest:'Interesting idea, not ready to invest yet',invest:'Interesting idea, would like to invest'};
+ const AMOUNTS={'50000':'₹50,000','100000':'₹1 lakh','200000':'₹2 lakh','500000':'₹5 lakh'};
+ const token=document.querySelector('meta[name="csrf-token"]'),preview=document.querySelector('#stand-preview'),amountWrap=document.querySelector('#amount-wrap'),amountSel=document.querySelector('#amount'),status=document.querySelector('#stand-status'),save=document.querySelector('#save-stand'),next=document.querySelector('#stand-next'),mail=document.querySelector('#email-link');
+ const choice=()=>{const el=box.querySelector('input[name="stand"]:checked');return el?el.value:'';};
+ const sync=()=>{const invest=choice()==='invest';amountWrap.hidden=!invest;if(!invest)amountSel.value='';status.textContent='';next.hidden=true;};
+ const showNext=(interest,amount)=>{
+  const detail=LABELS[interest]+(interest==='invest'?' ('+AMOUNTS[amount]+')':'');
+  const body='Hello,\n\nMy response in the DhaShu Investor Room: '+LABELS[interest]+'.\n'+(interest==='invest'?'Indicative amount (non-binding): '+AMOUNTS[amount]+'.\n':'')+'\nName:\nQuestions or comments:\n';
+  mail.href='mailto:'+CONTACT+'?subject='+encodeURIComponent('DhaShu Investor Room: '+detail)+'&body='+encodeURIComponent(body);
+  next.hidden=false;
+ };
  box.addEventListener('change',sync);
- try{const mine=JSON.parse(document.querySelector('#my-response').textContent);
+ if(!token){preview.hidden=false;save.disabled=true;save.title='Preview only';}
+ else{try{const mine=JSON.parse(document.querySelector('#my-response').textContent);
   const r=box.querySelector('input[name="stand"][value="'+mine.interest+'"]');
-  if(r){r.checked=true;if(mine.interest==='invest'&&mine.amount){const a=box.querySelector('input[name="amount"][value="'+mine.amount+'"]');if(a)a.checked=true;}}}catch{}
- sync();
+  if(r){r.checked=true;sync();if(mine.interest==='invest'&&AMOUNTS[mine.amount])amountSel.value=mine.amount;if(mine.interest==='idea_no_invest'||AMOUNTS[mine.amount])showNext(mine.interest,mine.amount);}}catch{}}
  save.addEventListener('click',async()=>{
-  const interest=pick('stand'),amount=pick('amount');
+  if(!token)return;
+  const interest=choice(),amount=amountSel.value;
   if(!interest){status.textContent='Please choose one of the two options.';return;}
   if(interest==='invest'&&!amount){status.textContent='Please choose an indicative amount.';return;}
-  save.disabled=true;status.textContent='Recording…';
+  save.disabled=true;status.textContent='Saving…';
   try{
    const res=await fetch('/investors/response',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({csrf:token.content,interest,amount:interest==='invest'?amount:''})});
    const ok=res.ok&&(res.headers.get('content-type')||'').includes('json');
-   status.textContent=ok?'Recorded. Thank you. This is non-binding, and the founders will be in touch.':'We could not record this. Please refresh the page and try again.';
-  }catch{status.textContent='We could not record this. Please check your connection and try again.';}
+   if(ok){status.textContent='Saved. Thank you. This is non-binding, and the founders can now see your response.';showNext(interest,amount);}
+   else status.textContent='We could not save this. Please refresh the page and try again.';
+  }catch{status.textContent='We could not save this. Please check your connection and try again.';}
   save.disabled=false;
  });
 })();
